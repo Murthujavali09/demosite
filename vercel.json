@@ -1,0 +1,5 @@
+{
+  "env": {
+    "PLAYWRIGHT_INSTALL_BROWSERS": "0"
+  }
+}
