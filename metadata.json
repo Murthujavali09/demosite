@@ -1,0 +1,6 @@
+{
+  "name": "Simple Authentication Portal",
+  "description": "A beautifully crafted and simple single-page React app showcasing a responsive login and signup portal with local storage authentication persistence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
