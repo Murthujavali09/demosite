@@ -1,0 +1,8 @@
+{
+  "name": "Hello World Script",
+  "description": "A simple TypeScript script that writes a text artifact to the output folder.",
+  "category": "Examples",
+  "icon": "terminal",
+  "runner": "tsx",
+  "entry": "run.ts"
+}

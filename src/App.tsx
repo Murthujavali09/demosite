@@ -6,6 +6,13 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
+  fetchScriptDetail,
+  fetchScripts,
+  runScript as executeScript,
+  type ArtifactInfo,
+  type ScriptMeta,
+} from "./lib/automationApi";
+import {
   Mail,
   Lock,
   Eye,
@@ -43,98 +50,20 @@ interface UserAccount {
   createdAt?: string; // date string
 }
 
-interface Automation {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  category: string;
-  code?: string;
+const SCRIPT_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  chrome: Chrome,
+  terminal: Terminal,
+  file: FileText,
+  message: MessageSquare,
+  git: GitBranch,
+  database: Database,
+  camera: Camera,
+  code: Code,
+};
+
+function getScriptIcon(iconName: string) {
+  return SCRIPT_ICONS[iconName] || Terminal;
 }
-
-const AVAILABLE_AUTOMATIONS: Automation[] = [
-  {
-    id: "amazon-playwright",
-    name: "Amazon AC Screenshot Scraper",
-    description: "Launches a Playwright virtual browser session on Amazon India, navigates to the air conditioners department, handles item-detail popups, and captures a full-page layout screenshot.",
-    icon: Chrome,
-    category: "Playwright Automation",
-    code: `import { test, expect } from '@playwright/test';
-
-test('test', async ({ page }) => {
-  await page.goto('https://www.amazon.in/');
-
-  await page.getByRole('link', { name: 'ACs' }).click();
-
-  const page1Promise = page.waitForEvent('popup');
-  await page.locator('.a-link-normal').first().click();
-
-  const page1 = await page1Promise;
-
-  // Wait for the page to finish loading
-  await page1.waitForLoadState('networkidle');
-
-  // Take screenshot
-  await page1.screenshot({
-    path: 'amazon-product.png',
-    fullPage: true
-  });
-});`
-  },
-  {
-    id: "sprint-report",
-    name: "Sprint Report Generator",
-    description: "Compiles active sprint tasks, velocity metrics, and burndown charts into a sleek dashboard report.",
-    icon: FileText,
-    category: "Agile Planning",
-    code: `import { getSprintMetrics } from '@agile/core';
-
-export async function run() {
-  const metrics = await getSprintMetrics('current');
-  const report = await generateDashboardPdf(metrics);
-  console.log('Sprint PDF generated successfully.');
-  return report;
-}`
-  },
-  {
-    id: "slack-dispatcher",
-    name: "Slack Digest Dispatcher",
-    description: "Collects today's team blockers, completed tasks, and summaries and posts them to your Slack workspace.",
-    icon: MessageSquare,
-    category: "Communication",
-    code: `import { WebClient } from '@slack/web-api';
-
-const slack = new WebClient(process.env.SLACK_TOKEN);
-await slack.chat.postMessage({
-  channel: '#agile-daily',
-  text: '🚀 Team Daily Digest compilation complete.'
-});`
-  },
-  {
-    id: "branch-pruner",
-    name: "Stale Branch Pruner",
-    description: "Scans your connected repository for merged or inactive branches older than 14 days and schedules removal.",
-    icon: GitBranch,
-    category: "DevOps Integration",
-    code: `import { Octokit } from '@octokit/rest';
-
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-const branches = await octokit.repos.listBranches({ owner, repo });
-// filter branches older than 14 days and delete...`
-  },
-  {
-    id: "jira-sync",
-    name: "Database Schema Sync",
-    description: "Cross-references active Drizzle schema states with production migrations to guarantee environment parity.",
-    icon: Database,
-    category: "Infrastructure",
-    code: `import { drizzle } from 'drizzle-orm/node-postgres';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
-
-const db = drizzle(pool);
-await migrate(db, { migrationsFolder: './migrations' });`
-  },
-];
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -153,11 +82,16 @@ export default function App() {
   const [currentUserDetails, setCurrentUserDetails] = useState<UserAccount | null>(null);
 
   // Automation running states
+  const [automations, setAutomations] = useState<ScriptMeta[]>([]);
+  const [scriptsLoading, setScriptsLoading] = useState(false);
+  const [scriptsError, setScriptsError] = useState("");
+  const [scriptSources, setScriptSources] = useState<Record<string, string>>({});
+  const [scriptSourceFiles, setScriptSourceFiles] = useState<Record<string, string>>({});
   const [runningStates, setRunningStates] = useState<Record<string, "idle" | "running" | "success">>({});
   const [executionLogs, setExecutionLogs] = useState<string[]>([]);
   const [expandedCodeId, setExpandedCodeId] = useState<string | null>(null);
-  const [hasAmazonArtifact, setHasAmazonArtifact] = useState(false);
-  const [viewScreenshotModal, setViewScreenshotModal] = useState(false);
+  const [artifactsByScript, setArtifactsByScript] = useState<Record<string, ArtifactInfo[]>>({});
+  const [previewArtifact, setPreviewArtifact] = useState<ArtifactInfo | null>(null);
 
   // Placeholder actions feedback
   const [showPlaceholderFeedback, setShowPlaceholderFeedback] = useState(false);
@@ -234,6 +168,58 @@ export default function App() {
       setCurrentUserDetails(null);
     }
   }, [currentUser, currentUserName]);
+
+  useEffect(() => {
+    if (!currentUser || currentPath !== "/dashboard") return;
+
+    let cancelled = false;
+
+    const loadScripts = async () => {
+      setScriptsLoading(true);
+      setScriptsError("");
+      try {
+        const scripts = await fetchScripts();
+        if (!cancelled) {
+          setAutomations(scripts);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setScriptsError(err instanceof Error ? err.message : "Failed to load scripts");
+        }
+      } finally {
+        if (!cancelled) {
+          setScriptsLoading(false);
+        }
+      }
+    };
+
+    loadScripts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, currentPath]);
+
+  const toggleCodeSnippet = async (id: string) => {
+    if (expandedCodeId === id) {
+      setExpandedCodeId(null);
+      return;
+    }
+
+    setExpandedCodeId(id);
+
+    if (!scriptSources[id]) {
+      try {
+        const detail = await fetchScriptDetail(id);
+        setScriptSources((prev) => ({ ...prev, [id]: detail.source }));
+        setScriptSourceFiles((prev) => ({ ...prev, [id]: detail.sourceFile }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load script source";
+        setScriptSources((prev) => ({ ...prev, [id]: `// ${message}` }));
+        setScriptSourceFiles((prev) => ({ ...prev, [id]: "error.txt" }));
+      }
+    }
+  };
 
   // Handle input actions
   const handleFullNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -395,121 +381,65 @@ export default function App() {
     navigate("/login");
   };
 
-  // Automation Execution simulation
-  const runAutomation = (id: string, name: string) => {
+  // Automation execution via backend API
+  const runAutomation = async (id: string, name: string) => {
     if (runningStates[id] === "running") return;
 
     setRunningStates((prev) => ({ ...prev, [id]: "running" }));
 
     const startTime = new Date().toLocaleTimeString();
-    
-    let newLogs: string[] = [];
-    if (id === "amazon-playwright") {
-      newLogs = [
-        `[${startTime}] [playwright] Executing: npx playwright test amazon-detail.spec.ts`,
-        `[${startTime}] [playwright] Launching headless chromium browser instance...`,
-        `[${startTime}] [playwright] page.goto("https://www.amazon.in/")`,
-        `[${startTime}] [playwright] Waiting for main page layout to resolve...`
-      ];
-    } else {
-      newLogs = [
-        `[${startTime}] Initiating job: ${name}...`,
-        `[${startTime}] Allocating virtual resource worker...`,
-        `[${startTime}] Resolving payload authentication...`,
-      ];
-    }
-    
-    setExecutionLogs((prev) => [...newLogs, ...prev]);
+    setExecutionLogs((prev) => [
+      `[${startTime}] Starting: ${name}...`,
+      ...prev,
+    ]);
 
-    setTimeout(() => {
-      const stepTime = new Date().toLocaleTimeString();
-      let stepLogs: string[] = [];
-      if (id === "amazon-playwright") {
-        stepLogs = [
-          `[${stepTime}] [playwright] page.getByRole("link", { name: "ACs" }).click()`,
-          `[${stepTime}] [playwright] Intercepting click-triggered popup page event promise...`,
-          `[${stepTime}] [playwright] Popup tab initialized successfully. URL routing active.`,
-          `[${stepTime}] [playwright] page1.waitForLoadState("networkidle") - Waiting for assets...`,
-        ];
-      } else {
-        stepLogs = [
-          `[${stepTime}] Syncing active artifacts & analyzing environment factors...`,
-          `[${stepTime}] Resolving core dependencies and configurations...`,
-        ];
-      }
-      setExecutionLogs((prev) => [
-        ...stepLogs,
-        ...prev,
-      ]);
-    }, 700);
+    try {
+      await executeScript(id, {
+        onLog: (message) => {
+          const logTime = new Date().toLocaleTimeString();
+          setExecutionLogs((prev) => [`[${logTime}] ${message}`, ...prev]);
+        },
+        onComplete: (result) => {
+          const endTime = new Date().toLocaleTimeString();
 
-    setTimeout(() => {
+          if (result.success) {
+            setArtifactsByScript((prev) => ({ ...prev, [id]: result.artifacts }));
+            setExecutionLogs((prev) => [
+              `[${endTime}] SUCCESS: ${name} completed with ${result.artifacts.length} artifact(s).`,
+              ...prev,
+            ]);
+            setRunningStates((prev) => ({ ...prev, [id]: "success" }));
+          } else {
+            setExecutionLogs((prev) => [
+              `[${endTime}] FAILED: ${result.error || "Script execution failed"}`,
+              ...prev,
+            ]);
+            setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
+          }
+
+          setTimeout(() => {
+            setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
+          }, 4000);
+        },
+      });
+    } catch (err) {
       const endTime = new Date().toLocaleTimeString();
-      let endLogs: string[] = [];
-      if (id === "amazon-playwright") {
-        endLogs = [
-          `[${endTime}] [playwright] page1.screenshot({ path: "amazon-product.png", fullPage: true })`,
-          `[${endTime}] [playwright] Captured 1440x2800 full-page screenshot. Saved to workspace.`,
-          `[${endTime}] SUCCESS: Playwright Amazon AC Screenshot test passed! 1 spec test run completed successfully.`,
-        ];
-        downloadScreenshot();
-      } else {
-        endLogs = [
-          `[${endTime}] SUCCESS: ${name} executed successfully! Task marked closed.`,
-        ];
-      }
-      setRunningStates((prev) => ({ ...prev, [id]: "success" }));
+      const message = err instanceof Error ? err.message : "Failed to run script";
       setExecutionLogs((prev) => [
-        ...endLogs,
+        `[${endTime}] ERROR: ${message}`,
         ...prev,
       ]);
-
-      setTimeout(() => {
-        setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
-      }, 4000);
-    }, 1800);
+      setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
+    }
   };
 
-  const downloadScreenshot = () => {
-    // High resolution mockup of a modern split air conditioner product view
-    const imageUrl = "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=1200&auto=format&fit=crop";
-    
-    // We fetch the image, convert it to a canvas and download it dynamically
-    // to force a standard browser download action directly to the Downloads folder
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const blobUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = blobUrl;
-            link.download = "amazon-product.png";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(blobUrl);
-          }
-        }, "image/png");
-      }
-    };
-    img.onerror = () => {
-      // Direct anchor tag fallback if CORS fails
-      const link = document.createElement("a");
-      link.href = imageUrl;
-      link.download = "amazon-product.png";
-      link.target = "_blank";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    };
-    img.src = imageUrl;
+  const downloadArtifact = (artifact: ArtifactInfo) => {
+    const link = document.createElement("a");
+    link.href = artifact.url;
+    link.download = artifact.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Shared responsive navigation header bar
@@ -605,19 +535,38 @@ export default function App() {
                   <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
                     <span>Available Automations</span>
                     <span className="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-bold">
-                      {AVAILABLE_AUTOMATIONS.length}
+                      {automations.length}
                     </span>
                   </h3>
                   <div className="text-xs text-slate-400 font-semibold flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Systems Operational</span>
+                    <span>{scriptsLoading ? "Loading scripts..." : "Systems Operational"}</span>
                   </div>
                 </div>
 
+                {scriptsError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+                    {scriptsError}. Make sure the API server is running (`npm run dev`).
+                  </div>
+                )}
+
+                {!scriptsLoading && automations.length === 0 && !scriptsError && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
+                    <p className="text-sm font-semibold text-slate-700">No scripts found</p>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Add a folder under <span className="font-mono">scripts/</span> with a{" "}
+                      <span className="font-mono">script.json</span> and entry file.
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {AVAILABLE_AUTOMATIONS.map((auto) => {
-                    const IconComp = auto.icon;
+                  {automations.map((auto) => {
+                    const IconComp = getScriptIcon(auto.icon);
                     const runState = runningStates[auto.id] || "idle";
+                    const artifacts = artifactsByScript[auto.id] || [];
+                    const sourceCode = scriptSources[auto.id];
+                    const sourceFile = scriptSourceFiles[auto.id] || auto.entry;
 
                     return (
                       <div
@@ -667,18 +616,14 @@ export default function App() {
                         </div>
 
                         {/* Action footer */}
-                        <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
-                          {auto.code ? (
-                            <button
-                              onClick={() => setExpandedCodeId(expandedCodeId === auto.id ? null : auto.id)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all cursor-pointer"
-                            >
-                              <Code size={13} />
-                              <span>{expandedCodeId === auto.id ? "Hide Code" : "Code Snippet"}</span>
-                            </button>
-                          ) : (
-                            <div />
-                          )}
+                        <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-2">
+                          <button
+                            onClick={() => toggleCodeSnippet(auto.id)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all cursor-pointer"
+                          >
+                            <Code size={13} />
+                            <span>{expandedCodeId === auto.id ? "Hide Code" : "Code Snippet"}</span>
+                          </button>
 
                           <button
                             onClick={() => runAutomation(auto.id, auto.name)}
@@ -710,9 +655,28 @@ export default function App() {
                           </button>
                         </div>
 
+                        {artifacts.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {artifacts.map((artifact) => (
+                              <button
+                                key={artifact.url}
+                                onClick={() =>
+                                  artifact.mimeType.startsWith("image/")
+                                    ? setPreviewArtifact(artifact)
+                                    : downloadArtifact(artifact)
+                                }
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                              >
+                                <Download size={11} />
+                                <span>{artifact.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
                         {/* Collapsible code snippet */}
                         <AnimatePresence initial={false}>
-                          {expandedCodeId === auto.id && auto.code && (
+                          {expandedCodeId === auto.id && (
                             <motion.div
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "auto" }}
@@ -722,10 +686,10 @@ export default function App() {
                             >
                               <div className="mt-3 p-3 bg-slate-950 rounded-xl border border-slate-900 text-[10px] text-emerald-400 font-mono overflow-x-auto max-h-60 leading-relaxed scrollbar-thin">
                                 <div className="text-slate-500 border-b border-slate-900 pb-1.5 mb-1.5 flex items-center justify-between">
-                                  <span>automation_spec.ts</span>
-                                  <span className="text-[9px] uppercase">TypeScript</span>
+                                  <span>{sourceFile}</span>
+                                  <span className="text-[9px] uppercase">{auto.runner}</span>
                                 </div>
-                                {auto.code}
+                                {sourceCode || "Loading source..."}
                               </div>
                             </motion.div>
                           )}
@@ -770,6 +734,8 @@ export default function App() {
                             className={`leading-relaxed ${
                               log.includes("SUCCESS")
                                 ? "text-emerald-400 font-bold"
+                                : log.includes("FAILED") || log.includes("ERROR")
+                                ? "text-rose-400 font-bold"
                                 : "text-slate-300"
                             }`}
                           >
@@ -1156,115 +1122,61 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Screenshot Preview Modal */}
+      {/* Artifact Preview Modal */}
       <AnimatePresence>
-        {viewScreenshotModal && (
+        {previewArtifact && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col"
+              className="relative bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col"
             >
-              {/* Browser Header Bar */}
               <div className="bg-slate-900 text-slate-300 px-4 py-3.5 flex items-center justify-between border-b border-slate-800">
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-full bg-rose-500"></span>
                   <span className="w-3 h-3 rounded-full bg-amber-500"></span>
                   <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-                  <span className="text-xs text-slate-400 font-mono ml-3 select-none">amazon-product.png (412 KB)</span>
+                  <span className="text-xs text-slate-400 font-mono ml-3 select-none">
+                    {previewArtifact.name}
+                  </span>
                 </div>
                 <button
-                  onClick={() => setViewScreenshotModal(false)}
+                  onClick={() => setPreviewArtifact(null)}
                   className="text-xs font-bold text-slate-400 hover:text-white transition-all px-2.5 py-1 rounded-md hover:bg-slate-800 cursor-pointer"
                 >
                   Close
                 </button>
               </div>
 
-              {/* Browser Address Bar */}
-              <div className="bg-slate-950 px-4 py-2 flex items-center gap-2 border-b border-slate-900">
-                <div className="p-1 text-slate-500 bg-slate-900 rounded-md">
-                  <Lock size={12} className="text-emerald-500" />
-                </div>
-                <div className="flex-grow bg-slate-900 text-slate-400 rounded-lg py-1 px-3 text-[11px] font-mono select-all truncate">
-                  https://www.amazon.in/dp/B0BYZ123/smart-split-airconditioner-1.5ton-5star
-                </div>
+              <div className="max-h-[70vh] overflow-y-auto bg-slate-50 p-4">
+                {previewArtifact.mimeType.startsWith("image/") ? (
+                  <img
+                    src={previewArtifact.url}
+                    alt={previewArtifact.name}
+                    className="w-full rounded-xl border border-slate-200 bg-white"
+                  />
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+                    Preview is not available for this file type. Use download instead.
+                  </div>
+                )}
               </div>
 
-              {/* Scrollable Amazon Mockup Content */}
-              <div className="max-h-[480px] overflow-y-auto bg-slate-50 p-4 scrollbar-thin">
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-xs p-5 max-w-lg mx-auto flex flex-col gap-4">
-                  {/* Mock Amazon Header Navigation */}
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <span className="font-black text-amber-500 text-sm tracking-tight font-sans">amazon<span className="text-white bg-slate-900 px-1.5 py-0.5 rounded ml-0.5 text-[10px]">.in</span></span>
-                    <span className="text-[10px] text-slate-400 font-mono">Delivering to Mumbai 400001</span>
-                  </div>
-
-                  {/* Product View */}
-                  <div className="flex flex-col gap-3">
-                    <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
-                      <img
-                        src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=1200&auto=format&fit=crop"
-                        alt="Smart Split Air Conditioner"
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                      <span className="absolute top-2 left-2 bg-amber-500 text-slate-950 font-bold text-[9px] uppercase px-1.5 py-0.5 rounded shadow-sm">
-                        Amazon's Choice
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-slate-400 font-mono tracking-wider uppercase">FrostFlow Smart Tech</p>
-                      <h3 className="font-bold text-slate-800 text-sm leading-tight">
-                        FrostFlow 1.5 Ton 5 Star Wi-Fi Inverter Split AC (Copper, PM 2.5 Filter, 2026 Model, White)
-                      </h3>
-                      <div className="flex items-center gap-1 text-[11px] text-amber-500 font-semibold">
-                        <span>★ 4.5</span>
-                        <span className="text-slate-400 font-normal ml-1">(12,482 customer ratings)</span>
-                      </div>
-                    </div>
-
-                    <div className="border-y border-slate-100 py-3 my-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-xs text-rose-600 font-medium">-36%</span>
-                        <span className="text-xl font-bold text-slate-900">₹34,990</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5">M.R.P.: <span className="line-through">₹54,990</span> (Inclusive of all taxes)</p>
-                    </div>
-
-                    {/* Stock and Quick Actions */}
-                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 text-emerald-800 text-[11px] leading-relaxed">
-                      <p className="font-bold">✓ In stock.</p>
-                      <p className="text-emerald-700/80 mt-0.5">FREE delivery tomorrow. Order within <span className="font-semibold">3 hrs 42 mins</span>.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Action Footer */}
-              <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between gap-3">
-                <span className="text-xs text-slate-500 flex items-center gap-1 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Ready to download
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setViewScreenshotModal(false)}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-all rounded-xl cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={downloadScreenshot}
-                    className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-                  >
-                    <Download size={13} />
-                    <span>Download Screenshot PNG</span>
-                  </button>
-                </div>
+              <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setPreviewArtifact(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-all rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => downloadArtifact(previewArtifact)}
+                  className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  <Download size={13} />
+                  <span>Download</span>
+                </button>
               </div>
             </motion.div>
           </div>

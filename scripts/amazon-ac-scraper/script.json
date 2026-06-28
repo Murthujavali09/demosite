@@ -1,0 +1,8 @@
+{
+  "name": "Amazon AC Screenshot Scraper",
+  "description": "Launches Playwright on Amazon India, opens a split AC search result, and saves a full-page screenshot.",
+  "category": "Playwright Automation",
+  "icon": "chrome",
+  "runner": "playwright",
+  "entry": "run.spec.ts"
+}
