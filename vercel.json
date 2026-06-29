@@ -12,16 +12,7 @@
   },
   "functions": {
     "api/[...path].ts": {
-      "includeFiles": [
-        "scripts/**",
-        "server/**",
-        "playwright.config.ts",
-        "node_modules/tsx/**",
-        "node_modules/@browserbasehq/sdk/**",
-        "node_modules/@playwright/test/**",
-        "node_modules/playwright/**",
-        "node_modules/playwright-core/**"
-      ],
+      "includeFiles": "server/**",
       "maxDuration": 60
     }
   },
