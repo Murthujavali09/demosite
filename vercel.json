@@ -2,11 +2,6 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
-  "build": {
-    "env": {
-      "PLAYWRIGHT_INSTALL_BROWSERS": "0"
-    }
-  },
   "env": {
     "PLAYWRIGHT_INSTALL_BROWSERS": "0"
   },
@@ -15,12 +10,5 @@
       "includeFiles": "server/**",
       "maxDuration": 60
     }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ],
-  "name": "simple-auth-portal"
+  }
 }
