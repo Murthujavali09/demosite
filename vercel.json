@@ -6,9 +6,9 @@
     "PLAYWRIGHT_INSTALL_BROWSERS": "0"
   },
   "functions": {
-    "api/[...path].ts": {
-      "includeFiles": "server/**",
-      "maxDuration": 60
-    }
+  "api/[...path].ts": {
+    "includeFiles": "scripts/**/*",
+    "maxDuration": 60
+  }
   }
 }
