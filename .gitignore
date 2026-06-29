@@ -9,3 +9,4 @@ coverage/
 
 .vercel
 output/
+test-results/

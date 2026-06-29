@@ -7,11 +7,17 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   use: {
+    channel: "chrome",
     headless: true,
     viewport: { width: 1280, height: 720 },
     screenshot: "off",
     video: "off",
     trace: "off",
+    locale: "en-IN",
+    timezoneId: "Asia/Kolkata",
+    extraHTTPHeaders: {
+      "Accept-Language": "en-IN,en;q=0.9",
+    },
   },
   reporter: [["list"]],
 });

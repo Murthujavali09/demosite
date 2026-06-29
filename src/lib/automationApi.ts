@@ -13,6 +13,16 @@ export interface ScriptDetail extends ScriptMeta {
   sourceFile: string;
 }
 
+export interface ScriptDiscoveryWarning {
+  folder: string;
+  message: string;
+}
+
+export interface ScriptsResponse {
+  scripts: ScriptMeta[];
+  warnings?: ScriptDiscoveryWarning[];
+}
+
 export interface ArtifactInfo {
   name: string;
   url: string;
@@ -40,13 +50,12 @@ async function parseError(response: Response): Promise<string> {
   }
 }
 
-export async function fetchScripts(): Promise<ScriptMeta[]> {
+export async function fetchScripts(): Promise<ScriptsResponse> {
   const response = await fetch("/api/scripts");
   if (!response.ok) {
     throw new Error(await parseError(response));
   }
-  const data = await response.json();
-  return data.scripts as ScriptMeta[];
+  return response.json();
 }
 
 export async function fetchScriptDetail(id: string): Promise<ScriptDetail> {

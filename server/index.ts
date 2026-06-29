@@ -1,9 +1,10 @@
+import "./env.js";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
   OUTPUT_DIR,
-  discoverScripts,
+  discoverScriptCatalog,
   getScriptDetail,
   resolveArtifactPath,
 } from "./scripts.js";
@@ -22,7 +23,7 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/scripts", (_req, res) => {
   try {
-    res.json({ scripts: discoverScripts() });
+    res.json(discoverScriptCatalog());
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to list scripts",

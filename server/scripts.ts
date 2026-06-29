@@ -1,12 +1,20 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import type { ScriptDetail, ScriptManifest, ScriptMeta, ScriptRunner } from "./types.js";
+import type {
+  ScriptDetail,
+  ScriptDiscoveryWarning,
+  ScriptManifest,
+  ScriptMeta,
+  ScriptRunner,
+} from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.resolve(__dirname, "..");
 export const SCRIPTS_DIR = path.join(ROOT_DIR, "scripts");
-export const OUTPUT_DIR = path.join(ROOT_DIR, "output");
+export const OUTPUT_DIR =
+  process.env.SCRIPT_OUTPUT_ROOT ||
+  (process.env.VERCEL ? path.join("/tmp", "automation-output") : path.join(ROOT_DIR, "output"));
 
 const SCRIPT_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const ENTRY_CANDIDATES = [
@@ -85,25 +93,46 @@ function readManifest(scriptDir: string, id: string): ScriptMeta {
 }
 
 export function discoverScripts(): ScriptMeta[] {
+  return discoverScriptCatalog().scripts;
+}
+
+export function discoverScriptCatalog(): {
+  scripts: ScriptMeta[];
+  warnings: ScriptDiscoveryWarning[];
+} {
   if (!fs.existsSync(SCRIPTS_DIR)) {
     fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
-    return [];
+    return { scripts: [], warnings: [] };
   }
 
-  return fs
+  const warnings: ScriptDiscoveryWarning[] = [];
+  const scripts = fs
     .readdirSync(SCRIPTS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .filter((id) => SCRIPT_ID_PATTERN.test(id))
     .map((id) => {
+      if (!SCRIPT_ID_PATTERN.test(id)) {
+        warnings.push({
+          folder: id,
+          message: "Folder names must use lowercase letters, numbers, and hyphens only.",
+        });
+        return null;
+      }
+
       try {
         return readManifest(getScriptDir(id), id);
-      } catch {
+      } catch (error) {
+        warnings.push({
+          folder: id,
+          message: error instanceof Error ? error.message : "Failed to load script.",
+        });
         return null;
       }
     })
     .filter((script): script is ScriptMeta => script !== null)
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  return { scripts, warnings };
 }
 
 export function getScriptDetail(id: string): ScriptDetail {

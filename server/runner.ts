@@ -92,6 +92,7 @@ export async function runScript(scriptId: string, callbacks: RunCallbacks): Prom
   const outputDir = createRunOutputDir(scriptId, runId);
   const scriptDir = path.join(ROOT_DIR, "scripts", scriptId);
   const entryPath = path.resolve(scriptDir, script.entry);
+  const playwrightTestArg = path.posix.join(scriptId, script.entry.replace(/\\/g, "/"));
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -113,7 +114,7 @@ export async function runScript(scriptId: string, callbacks: RunCallbacks): Prom
         [
           PLAYWRIGHT_CLI,
           "test",
-          entryPath,
+          playwrightTestArg,
           "--config",
           path.join(ROOT_DIR, "playwright.config.ts"),
         ],

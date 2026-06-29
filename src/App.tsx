@@ -10,6 +10,7 @@ import {
   fetchScripts,
   runScript as executeScript,
   type ArtifactInfo,
+  type ScriptDiscoveryWarning,
   type ScriptMeta,
 } from "./lib/automationApi";
 import {
@@ -85,6 +86,7 @@ export default function App() {
   const [automations, setAutomations] = useState<ScriptMeta[]>([]);
   const [scriptsLoading, setScriptsLoading] = useState(false);
   const [scriptsError, setScriptsError] = useState("");
+  const [scriptWarnings, setScriptWarnings] = useState<ScriptDiscoveryWarning[]>([]);
   const [scriptSources, setScriptSources] = useState<Record<string, string>>({});
   const [scriptSourceFiles, setScriptSourceFiles] = useState<Record<string, string>>({});
   const [runningStates, setRunningStates] = useState<Record<string, "idle" | "running" | "success">>({});
@@ -174,29 +176,34 @@ export default function App() {
 
     let cancelled = false;
 
-    const loadScripts = async () => {
-      setScriptsLoading(true);
+    const loadScripts = async (showLoading = false) => {
+      if (showLoading) {
+        setScriptsLoading(true);
+      }
       setScriptsError("");
       try {
-        const scripts = await fetchScripts();
+        const { scripts, warnings = [] } = await fetchScripts();
         if (!cancelled) {
           setAutomations(scripts);
+          setScriptWarnings(warnings);
         }
       } catch (err) {
         if (!cancelled) {
           setScriptsError(err instanceof Error ? err.message : "Failed to load scripts");
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && showLoading) {
           setScriptsLoading(false);
         }
       }
     };
 
-    loadScripts();
+    loadScripts(true);
+    const refreshTimer = window.setInterval(() => loadScripts(), 5000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(refreshTimer);
     };
   }, [currentUser, currentPath]);
 
@@ -547,6 +554,17 @@ export default function App() {
                 {scriptsError && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
                     {scriptsError}. Make sure the API server is running (`npm run dev`).
+                  </div>
+                )}
+
+                {scriptWarnings.length > 0 && !scriptsError && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 space-y-1">
+                    <p className="font-semibold">Some script folders were skipped:</p>
+                    {scriptWarnings.map((warning) => (
+                      <p key={warning.folder}>
+                        <span className="font-mono">{warning.folder}</span>: {warning.message}
+                      </p>
+                    ))}
                   </div>
                 )}
 

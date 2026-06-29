@@ -29,3 +29,8 @@ export interface ArtifactInfo {
   url: string;
   mimeType: string;
 }
+
+export interface ScriptDiscoveryWarning {
+  folder: string;
+  message: string;
+}

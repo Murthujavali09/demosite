@@ -1,5 +1,35 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "build": {
+    "env": {
+      "PLAYWRIGHT_INSTALL_BROWSERS": "0"
+    }
+  },
   "env": {
     "PLAYWRIGHT_INSTALL_BROWSERS": "0"
-  }
+  },
+  "functions": {
+    "api/[...path].ts": {
+      "includeFiles": [
+        "scripts/**",
+        "server/**",
+        "playwright.config.ts",
+        "node_modules/tsx/**",
+        "node_modules/@browserbasehq/sdk/**",
+        "node_modules/@playwright/test/**",
+        "node_modules/playwright/**",
+        "node_modules/playwright-core/**"
+      ],
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "name": "simple-auth-portal"
 }

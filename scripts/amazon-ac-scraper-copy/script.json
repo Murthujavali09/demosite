@@ -3,6 +3,6 @@
   "description": "Launches Playwright on Amazon India, opens a split AC search result, and saves a full-page screenshot.",
   "category": "Playwright Automation",
   "icon": "chrome",
-  "runner": "tsx",
-  "entry": "run.ts"
+  "runner": "playwright",
+  "entry": "run.spec.ts"
 }
