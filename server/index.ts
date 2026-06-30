@@ -15,18 +15,7 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.API_PORT || 3001);
 
 const app = express();
-app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.originalUrl}`);
-  next();
-});
 app.use(express.json());
-app.get("/api/test", (_req, res) => {
-  res.json({ ok: true });
-});
-
-app.get("/api/test/abc", (_req, res) => {
-  res.json({ route: "nested works" });
-});
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -41,16 +30,28 @@ app.get("/api/scripts", (_req, res) => {
   }
 });
 
-app.get("/api/scripts/:id", (req, res) => {
+app.get("/api/script", (req, res) => {
+  const id = typeof req.query.id === "string" ? req.query.id : "";
+  if (!id) {
+    res.status(400).json({ error: "Missing script id" });
+    return;
+  }
+
   try {
-    res.json(getScriptDetail(req.params.id));
+    res.json(getScriptDetail(id));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load script";
     res.status(message.includes("not found") ? 404 : 400).json({ error: message });
   }
 });
 
-app.post("/api/scripts/:id/run", async (req, res) => {
+app.post("/api/run", async (req, res) => {
+  const scriptId = typeof req.body?.scriptId === "string" ? req.body.scriptId : "";
+  if (!scriptId) {
+    res.status(400).json({ error: "Missing scriptId" });
+    return;
+  }
+
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -61,7 +62,7 @@ app.post("/api/scripts/:id/run", async (req, res) => {
   };
 
   try {
-    const result = await runScript(req.params.id, {
+    const result = await runScript(scriptId, {
       onLog: (message) => writeEvent({ type: "log", message }),
     });
 
@@ -85,13 +86,18 @@ app.post("/api/scripts/:id/run", async (req, res) => {
   res.end();
 });
 
-app.get("/api/artifacts/:scriptId/:runId/:filename", (req, res) => {
+app.get("/api/artifact", (req, res) => {
+  const scriptId = typeof req.query.scriptId === "string" ? req.query.scriptId : "";
+  const runId = typeof req.query.runId === "string" ? req.query.runId : "";
+  const filename = typeof req.query.filename === "string" ? req.query.filename : "";
+
+  if (!scriptId || !runId || !filename) {
+    res.status(400).json({ error: "Missing artifact parameters" });
+    return;
+  }
+
   try {
-    const artifactPath = resolveArtifactPath(
-      req.params.scriptId,
-      req.params.runId,
-      req.params.filename
-    );
+    const artifactPath = resolveArtifactPath(scriptId, runId, filename);
     res.sendFile(artifactPath);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Artifact not found";

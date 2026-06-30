@@ -100,13 +100,6 @@ export function discoverScriptCatalog(): {
   scripts: ScriptMeta[];
   warnings: ScriptDiscoveryWarning[];
 } {
-  console.log("ROOT_DIR:", ROOT_DIR);
-console.log("SCRIPTS_DIR:", SCRIPTS_DIR);
-console.log("Exists:", fs.existsSync(SCRIPTS_DIR));
-
-if (fs.existsSync(SCRIPTS_DIR)) {
-  console.log("Contents:", fs.readdirSync(SCRIPTS_DIR));
-}
   if (!fs.existsSync(SCRIPTS_DIR)) {
     fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
     return { scripts: [], warnings: [] };

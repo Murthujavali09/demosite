@@ -50,7 +50,9 @@ function mimeTypeFor(filename: string): string {
 function buildArtifactUrls(scriptId: string, runId: string, files: string[]): ArtifactInfo[] {
   return files.map((name) => ({
     name,
-    url: `/api/artifacts/${scriptId}/${runId}/${encodeURIComponent(name)}`,
+    url: `/api/artifact?scriptId=${encodeURIComponent(scriptId)}&runId=${encodeURIComponent(
+      runId
+    )}&filename=${encodeURIComponent(name)}`,
     mimeType: mimeTypeFor(name),
   }));
 }

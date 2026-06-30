@@ -59,7 +59,7 @@ export async function fetchScripts(): Promise<ScriptsResponse> {
 }
 
 export async function fetchScriptDetail(id: string): Promise<ScriptDetail> {
-  const response = await fetch(`/api/scripts/${id}`);
+  const response = await fetch(`/api/script?id=${encodeURIComponent(id)}`);
   if (!response.ok) {
     throw new Error(await parseError(response));
   }
@@ -73,7 +73,13 @@ export async function runScript(
     onComplete: (result: RunCompleteEvent) => void;
   }
 ): Promise<void> {
-  const response = await fetch(`/api/scripts/${id}/run`, { method: "POST" });
+  const response = await fetch("/api/run", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ scriptId: id }),
+  });
   if (!response.ok) {
     throw new Error(await parseError(response));
   }
