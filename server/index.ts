@@ -15,6 +15,10 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.API_PORT || 3001);
 
 const app = express();
+app.use((req, _res, next) => {
+  console.log(`${req.method} ${req.originalUrl}`);
+  next();
+});
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
