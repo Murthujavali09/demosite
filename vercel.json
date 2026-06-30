@@ -7,43 +7,23 @@
   },
   "functions": {
     "api/health.ts": {
-      "includeFiles": [
-        "server/**",
-        "scripts/**"
-      ],
+      "includeFiles": "{server/**,scripts/**}",
       "maxDuration": 10
     },
     "api/scripts.ts": {
-      "includeFiles": [
-        "server/**",
-        "scripts/**"
-      ],
+      "includeFiles": "{server/**,scripts/**}",
       "maxDuration": 10
     },
     "api/script.ts": {
-      "includeFiles": [
-        "server/**",
-        "scripts/**"
-      ],
+      "includeFiles": "{server/**,scripts/**}",
       "maxDuration": 10
     },
     "api/run.ts": {
-      "includeFiles": [
-        "server/**",
-        "scripts/**",
-        "node_modules/tsx/**",
-        "node_modules/@browserbasehq/sdk/**",
-        "node_modules/@playwright/test/**",
-        "node_modules/playwright/**",
-        "node_modules/playwright-core/**"
-      ],
+      "includeFiles": "**/*",
       "maxDuration": 60
     },
     "api/artifact.ts": {
-      "includeFiles": [
-        "server/**",
-        "scripts/**"
-      ],
+      "includeFiles": "{server/**,scripts/**}",
       "maxDuration": 10
     }
   }
