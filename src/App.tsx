@@ -9,7 +9,6 @@ import {
   fetchScriptDetail,
   fetchScripts,
   runScript as executeScript,
-  type ArtifactInfo,
   type ScriptDiscoveryWarning,
   type ScriptMeta,
 } from "./lib/automationApi";
@@ -41,7 +40,6 @@ import {
   Chrome,
   Camera,
   Code,
-  Download
 } from "lucide-react";
 
 interface UserAccount {
@@ -92,8 +90,6 @@ export default function App() {
   const [runningStates, setRunningStates] = useState<Record<string, "idle" | "running" | "success">>({});
   const [executionLogs, setExecutionLogs] = useState<string[]>([]);
   const [expandedCodeId, setExpandedCodeId] = useState<string | null>(null);
-  const [artifactsByScript, setArtifactsByScript] = useState<Record<string, ArtifactInfo[]>>({});
-  const [previewArtifact, setPreviewArtifact] = useState<ArtifactInfo | null>(null);
 
   // Placeholder actions feedback
   const [showPlaceholderFeedback, setShowPlaceholderFeedback] = useState(false);
@@ -401,34 +397,26 @@ export default function App() {
     ]);
 
     try {
-      await executeScript(id, {
-        onLog: (message) => {
-          const logTime = new Date().toLocaleTimeString();
-          setExecutionLogs((prev) => [`[${logTime}] ${message}`, ...prev]);
-        },
-        onComplete: (result) => {
-          const endTime = new Date().toLocaleTimeString();
+      const download = await executeScript(id);
+      const url = URL.createObjectURL(download.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = download.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-          if (result.success) {
-            setArtifactsByScript((prev) => ({ ...prev, [id]: result.artifacts }));
-            setExecutionLogs((prev) => [
-              `[${endTime}] SUCCESS: ${name} completed with ${result.artifacts.length} artifact(s).`,
-              ...prev,
-            ]);
-            setRunningStates((prev) => ({ ...prev, [id]: "success" }));
-          } else {
-            setExecutionLogs((prev) => [
-              `[${endTime}] FAILED: ${result.error || "Script execution failed"}`,
-              ...prev,
-            ]);
-            setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
-          }
+      const endTime = new Date().toLocaleTimeString();
+      setExecutionLogs((prev) => [
+        `[${endTime}] SUCCESS: ${name} completed. Download started: ${download.filename}.`,
+        ...prev,
+      ]);
+      setRunningStates((prev) => ({ ...prev, [id]: "success" }));
 
-          setTimeout(() => {
-            setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
-          }, 4000);
-        },
-      });
+      setTimeout(() => {
+        setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
+      }, 4000);
     } catch (err) {
       const endTime = new Date().toLocaleTimeString();
       const message = err instanceof Error ? err.message : "Failed to run script";
@@ -438,15 +426,6 @@ export default function App() {
       ]);
       setRunningStates((prev) => ({ ...prev, [id]: "idle" }));
     }
-  };
-
-  const downloadArtifact = (artifact: ArtifactInfo) => {
-    const link = document.createElement("a");
-    link.href = artifact.url;
-    link.download = artifact.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   // Shared responsive navigation header bar
@@ -582,7 +561,6 @@ export default function App() {
                   {automations.map((auto) => {
                     const IconComp = getScriptIcon(auto.icon);
                     const runState = runningStates[auto.id] || "idle";
-                    const artifacts = artifactsByScript[auto.id] || [];
                     const sourceCode = scriptSources[auto.id];
                     const sourceFile = scriptSourceFiles[auto.id] || auto.entry;
 
@@ -662,7 +640,7 @@ export default function App() {
                             ) : runState === "success" ? (
                               <>
                                 <Check size={13} />
-                                <span>Triggered</span>
+                                <span>Downloaded</span>
                               </>
                             ) : (
                               <>
@@ -672,25 +650,6 @@ export default function App() {
                             )}
                           </button>
                         </div>
-
-                        {artifacts.length > 0 && (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            {artifacts.map((artifact) => (
-                              <button
-                                key={artifact.url}
-                                onClick={() =>
-                                  artifact.mimeType.startsWith("image/")
-                                    ? setPreviewArtifact(artifact)
-                                    : downloadArtifact(artifact)
-                                }
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
-                              >
-                                <Download size={11} />
-                                <span>{artifact.name}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
 
                         {/* Collapsible code snippet */}
                         <AnimatePresence initial={false}>
@@ -743,7 +702,7 @@ export default function App() {
                     </div>
 
                     {executionLogs.length === 0 ? (
-                      <p className="text-slate-600 italic">No tasks executed in this session. Trigger an automation to monitor output streams...</p>
+                      <p className="text-slate-600 italic">No tasks executed in this session. Run an automation to download its generated file...</p>
                     ) : (
                       <div className="space-y-1.5">
                         {executionLogs.map((log, index) => (
@@ -1137,67 +1096,6 @@ export default function App() {
               )}
             </AnimatePresence>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Artifact Preview Modal */}
-      <AnimatePresence>
-        {previewArtifact && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col"
-            >
-              <div className="bg-slate-900 text-slate-300 px-4 py-3.5 flex items-center justify-between border-b border-slate-800">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full bg-rose-500"></span>
-                  <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-                  <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-                  <span className="text-xs text-slate-400 font-mono ml-3 select-none">
-                    {previewArtifact.name}
-                  </span>
-                </div>
-                <button
-                  onClick={() => setPreviewArtifact(null)}
-                  className="text-xs font-bold text-slate-400 hover:text-white transition-all px-2.5 py-1 rounded-md hover:bg-slate-800 cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="max-h-[70vh] overflow-y-auto bg-slate-50 p-4">
-                {previewArtifact.mimeType.startsWith("image/") ? (
-                  <img
-                    src={previewArtifact.url}
-                    alt={previewArtifact.name}
-                    className="w-full rounded-xl border border-slate-200 bg-white"
-                  />
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-                    Preview is not available for this file type. Use download instead.
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
-                <button
-                  onClick={() => setPreviewArtifact(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-all rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => downloadArtifact(previewArtifact)}
-                  className="flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-                >
-                  <Download size={13} />
-                  <span>Download</span>
-                </button>
-              </div>
-            </motion.div>
-          </div>
         )}
       </AnimatePresence>
 

@@ -47,12 +47,9 @@ function mimeTypeFor(filename: string): string {
   }
 }
 
-function buildArtifactUrls(scriptId: string, runId: string, files: string[]): ArtifactInfo[] {
+function buildArtifactInfo(files: string[]): ArtifactInfo[] {
   return files.map((name) => ({
     name,
-    url: `/api/artifact?scriptId=${encodeURIComponent(scriptId)}&runId=${encodeURIComponent(
-      runId
-    )}&filename=${encodeURIComponent(name)}`,
     mimeType: mimeTypeFor(name),
   }));
 }
@@ -144,7 +141,7 @@ export async function runScript(scriptId: string, callbacks: RunCallbacks): Prom
   }
 
   const artifactFiles = listRunArtifacts(scriptId, runId);
-  const artifacts = buildArtifactUrls(scriptId, runId, artifactFiles);
+  const artifacts = buildArtifactInfo(artifactFiles);
   const success = exitCode === 0;
 
   if (success) {

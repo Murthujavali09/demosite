@@ -1,6 +1,8 @@
 import "../server/env.js";
+import fs from "fs";
 import type { IncomingMessage, ServerResponse } from "http";
 import { runScript } from "../server/runner.js";
+import { resolveArtifactPath } from "../server/scripts.js";
 
 interface ApiRequest extends IncomingMessage {
   body?: unknown;
@@ -50,34 +52,40 @@ export default async function handler(req: ApiRequest, res: ServerResponse) {
     return;
   }
 
-  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache");
-
-  const writeEvent = (payload: Record<string, unknown>) => {
-    res.write(`${JSON.stringify(payload)}\n`);
-  };
-
   try {
     const result = await runScript(scriptId, {
-      onLog: (message) => writeEvent({ type: "log", message }),
+      onLog: (message) => console.log(message),
     });
 
-    writeEvent({
-      type: "complete",
-      success: result.success,
-      runId: result.runId,
-      artifacts: result.artifacts,
-      error: result.error,
-    });
+    if (!result.success) {
+      res.setHeader("Content-Type", "application/json");
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: result.error || "Script execution failed" }));
+      return;
+    }
+
+    const artifact = result.artifacts[0];
+    if (!artifact) {
+      res.setHeader("Content-Type", "application/json");
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: "Script completed without generating a file" }));
+      return;
+    }
+
+    const artifactPath = resolveArtifactPath(scriptId, result.runId, artifact.name);
+    res.setHeader("Content-Type", artifact.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${artifact.name.replace(/"/g, "")}"`
+    );
+    fs.createReadStream(artifactPath).pipe(res);
   } catch (error) {
-    writeEvent({
-      type: "complete",
-      success: false,
-      runId: null,
-      artifacts: [],
-      error: error instanceof Error ? error.message : "Script execution failed",
-    });
+    res.setHeader("Content-Type", "application/json");
+    res.statusCode = 500;
+    res.end(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Script execution failed",
+      })
+    );
   }
-
-  res.end();
 }

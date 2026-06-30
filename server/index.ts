@@ -52,56 +52,29 @@ app.post("/api/run", async (req, res) => {
     return;
   }
 
-  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders?.();
-
-  const writeEvent = (payload: Record<string, unknown>) => {
-    res.write(`${JSON.stringify(payload)}\n`);
-  };
-
   try {
     const result = await runScript(scriptId, {
-      onLog: (message) => writeEvent({ type: "log", message }),
+      onLog: (message) => console.log(message),
     });
 
-    writeEvent({
-      type: "complete",
-      success: result.success,
-      runId: result.runId,
-      artifacts: result.artifacts,
-      error: result.error,
-    });
+    if (!result.success) {
+      res.status(500).json({ error: result.error || "Script execution failed" });
+      return;
+    }
+
+    const artifact = result.artifacts[0];
+    if (!artifact) {
+      res.status(404).json({ error: "Script completed without generating a file" });
+      return;
+    }
+
+    const artifactPath = resolveArtifactPath(scriptId, result.runId, artifact.name);
+    res.type(artifact.mimeType);
+    res.download(artifactPath, artifact.name);
   } catch (error) {
-    writeEvent({
-      type: "complete",
-      success: false,
-      runId: null,
-      artifacts: [],
+    res.status(500).json({
       error: error instanceof Error ? error.message : "Script execution failed",
     });
-  }
-
-  res.end();
-});
-
-app.get("/api/artifact", (req, res) => {
-  const scriptId = typeof req.query.scriptId === "string" ? req.query.scriptId : "";
-  const runId = typeof req.query.runId === "string" ? req.query.runId : "";
-  const filename = typeof req.query.filename === "string" ? req.query.filename : "";
-
-  if (!scriptId || !runId || !filename) {
-    res.status(400).json({ error: "Missing artifact parameters" });
-    return;
-  }
-
-  try {
-    const artifactPath = resolveArtifactPath(scriptId, runId, filename);
-    res.sendFile(artifactPath);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Artifact not found";
-    res.status(404).json({ error: message });
   }
 });
 

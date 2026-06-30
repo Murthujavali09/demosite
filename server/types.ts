@@ -26,7 +26,6 @@ export interface ScriptDetail extends ScriptMeta {
 
 export interface ArtifactInfo {
   name: string;
-  url: string;
   mimeType: string;
 }
 

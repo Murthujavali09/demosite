@@ -21,10 +21,6 @@
     "api/run.ts": {
       "includeFiles": "**/*",
       "maxDuration": 60
-    },
-    "api/artifact.ts": {
-      "includeFiles": "{server/**,scripts/**}",
-      "maxDuration": 10
     }
   }
 }
