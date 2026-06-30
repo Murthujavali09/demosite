@@ -20,7 +20,13 @@ app.use((req, _res, next) => {
   next();
 });
 app.use(express.json());
+app.get("/api/test", (_req, res) => {
+  res.json({ ok: true });
+});
 
+app.get("/api/test/abc", (_req, res) => {
+  res.json({ route: "nested works" });
+});
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
